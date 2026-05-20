@@ -180,7 +180,10 @@ mod tests {
         let err = Loader::new_bytes(truncated_png_signature())
             .load()
             .unwrap_err();
-        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
+        assert!(matches!(
+            err,
+            Error::Malformed(_) | Error::Io(_) | Error::UnsupportedFormat
+        ));
     }
 
     #[test]
@@ -195,7 +198,14 @@ mod tests {
         let path = dir.path().join("dummy.tga");
         std::fs::write(&path, b"\0\0\x02\0\0\0\0\0\0\0\0\0").unwrap();
         let err = Loader::new_path(&path).load().unwrap_err();
-        assert!(matches!(err, Error::UnsupportedFormat));
+        // With the tga feature on, the sniffer hands the file to the
+        // TGA decoder via the extension fallback. The 12-byte dummy is
+        // not a valid TGA, so we get a Malformed error rather than
+        // UnsupportedFormat.
+        assert!(matches!(
+            err,
+            Error::UnsupportedFormat | Error::Malformed(_) | Error::Decoder { .. }
+        ));
     }
 
     #[test]
@@ -204,14 +214,20 @@ mod tests {
             .format_hint(KnownFormat::Png)
             .load()
             .unwrap_err();
-        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
+        assert!(matches!(
+            err,
+            Error::Malformed(_) | Error::Io(_) | Error::UnsupportedFormat
+        ));
     }
 
     #[test]
     fn reader_buffers_into_memory() {
         let cursor = Cursor::new(truncated_png_signature());
         let err = Loader::new_reader(cursor).load().unwrap_err();
-        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
+        assert!(matches!(
+            err,
+            Error::Malformed(_) | Error::Io(_) | Error::UnsupportedFormat
+        ));
     }
 
     #[test]

@@ -51,7 +51,7 @@ bmp = ["dep:image"]
 ico = ["dep:image"]
 tga = ["dep:image"]
 qoi = ["dep:qoi"]
-exr = ["dep:exr"]
+exr = ["dep:image", "image/exr"]
 pnm = ["dep:image"]
 dds = ["dep:image"]
 jxl = ["dep:jxl-oxide"]
@@ -88,10 +88,6 @@ optional = true
 version = "0.4"
 optional = true
 
-[dependencies.exr]
-version = "1"
-optional = true
-
 [dependencies.jxl-oxide]
 version = "0.12"
 optional = true
@@ -103,7 +99,9 @@ default-features = false
 features = ["bmp", "ico", "tga", "pnm", "dds"]
 
 [dev-dependencies]
+gif = "0.13"
 png = "0.18"
+qoi = "0.4"
 tempfile = "3"
 
 [profile.release]
