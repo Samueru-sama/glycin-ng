@@ -13,13 +13,9 @@ crate-type = ["cdylib"]
 
 [features]
 default = []
-# Pulls in `resvg` (MPL-2.0). Builds of the shim that enable this
-# feature produce a binary that combines MIT/Apache-2.0 code with
-# MPL-2.0 code; the resulting library is a "Larger Work" in MPL
-# terms and the resvg-derived files retain their MPL-2.0 license.
-# Distributors who must stay strictly MIT/Apache should leave this
-# off and accept that SVG inputs return an "unsupported format"
-# error.
+# Pulls in `resvg` and `usvg` for SVG rasterization. Both are
+# MIT OR Apache-2.0 as of the 0.45.x line, so enabling this feature
+# stays inside the permissive-only contract.
 svg = ["dep:resvg"]
 
 [dependencies]

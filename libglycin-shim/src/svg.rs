@@ -4,10 +4,6 @@
 //! [`glycin_ng::Image`] containing a single RGBA8 frame at the SVG's
 //! intrinsic size, or scaled to the requested target dimensions when
 //! the caller provided them via `gly_frame_request_set_scale`.
-//!
-//! License note: the `resvg` family of crates is MPL-2.0. Builds
-//! that enable this feature are MPL "Larger Work" combinations; the
-//! `resvg` source files retain their MPL-2.0 terms.
 
 use glycin_ng::{Frame, Image, MemoryFormat, Texture};
 
