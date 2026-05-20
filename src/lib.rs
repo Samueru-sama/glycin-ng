@@ -15,7 +15,7 @@
 //!
 //! # Feature flags
 //!
-//! Capability groups (independent, both default on except `encode`):
+//! Capability groups (independent, all default on except `encode`):
 //! `decode`, `encode`, `metadata`.
 //!
 //! Sandbox layers (default on, Linux only): `landlock`, `seccomp`.
@@ -29,3 +29,17 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
+mod error;
+mod image;
+mod limits;
+mod memory;
+pub mod sandbox;
+
+pub use crate::error::{Error, Result};
+pub use crate::image::{Frame, Image, Orientation, Texture};
+pub use crate::limits::Limits;
+pub use crate::memory::MemoryFormat;
+pub use crate::sandbox::{
+    LandlockPosture, RlimitPosture, SandboxPosture, SandboxSelector, SeccompPosture,
+};
