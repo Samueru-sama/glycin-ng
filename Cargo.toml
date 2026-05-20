@@ -11,6 +11,7 @@ rust-version = "1.85"
 [lib]
 name = "glycin_ng"
 path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = [

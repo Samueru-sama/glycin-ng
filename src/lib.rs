@@ -30,6 +30,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+#[cfg(feature = "c-api")]
+pub mod c_api;
+
 mod error;
 mod formats;
 mod image;
