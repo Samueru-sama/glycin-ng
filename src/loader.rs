@@ -138,6 +138,8 @@ impl Loader {
             crate::sandbox::run_in_worker(sandbox, limits, move || {
                 dispatch(format, &bytes, &opts)
             })?;
+        #[cfg(feature = "metadata")]
+        crate::metadata::apply_orientation_if_present(&mut image, apply_transformations);
         image.set_sandbox_posture(posture);
         Ok(image)
     }

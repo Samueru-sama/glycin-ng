@@ -231,6 +231,12 @@ impl Image {
     pub(crate) fn set_sandbox_posture(&mut self, posture: SandboxPosture) {
         self.sandbox_posture = posture;
     }
+
+    pub(crate) fn replace_frames(&mut self, frames: Vec<Frame>, width: u32, height: u32) {
+        self.frames = frames;
+        self.width = width;
+        self.height = height;
+    }
 }
 
 impl Image {

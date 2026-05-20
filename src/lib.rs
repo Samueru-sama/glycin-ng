@@ -36,6 +36,8 @@ mod image;
 mod limits;
 mod loader;
 mod memory;
+#[cfg(feature = "metadata")]
+mod metadata;
 pub mod sandbox;
 pub mod sniff;
 
