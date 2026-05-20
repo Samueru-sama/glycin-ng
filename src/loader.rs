@@ -169,7 +169,7 @@ mod tests {
     use std::io::Cursor;
     use tempfile::tempdir;
 
-    fn fake_png() -> Vec<u8> {
+    fn truncated_png_signature() -> Vec<u8> {
         let mut v = b"\x89PNG\r\n\x1a\n".to_vec();
         v.extend_from_slice(b"\0\0\0\rIHDR");
         v
@@ -177,10 +177,10 @@ mod tests {
 
     #[test]
     fn bytes_loader_sniffs_and_dispatches() {
-        let err = Loader::new_bytes(fake_png()).load().unwrap_err();
-        // No decoder is wired in Phase 2 so dispatch returns
-        // UnsupportedFormat.
-        assert!(matches!(err, Error::UnsupportedFormat));
+        let err = Loader::new_bytes(truncated_png_signature())
+            .load()
+            .unwrap_err();
+        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
     }
 
     #[test]
@@ -204,14 +204,14 @@ mod tests {
             .format_hint(KnownFormat::Png)
             .load()
             .unwrap_err();
-        assert!(matches!(err, Error::UnsupportedFormat));
+        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
     }
 
     #[test]
     fn reader_buffers_into_memory() {
-        let cursor = Cursor::new(fake_png());
+        let cursor = Cursor::new(truncated_png_signature());
         let err = Loader::new_reader(cursor).load().unwrap_err();
-        assert!(matches!(err, Error::UnsupportedFormat));
+        assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
     }
 
     #[test]

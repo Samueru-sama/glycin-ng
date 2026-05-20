@@ -5,6 +5,9 @@
 //! whose decoder has not yet been wired, return
 //! [`Error::UnsupportedFormat`](crate::Error::UnsupportedFormat).
 
+#[cfg(feature = "png")]
+mod png;
+
 use crate::sniff::KnownFormat;
 use crate::{Error, Image, Limits, Result};
 
@@ -21,7 +24,12 @@ pub(crate) fn dispatch(
     bytes: &[u8],
     opts: &DecodeOptions,
 ) -> Result<Image> {
-    let _ = (bytes, opts);
-    let _ = format;
-    Err(Error::UnsupportedFormat)
+    match format {
+        #[cfg(feature = "png")]
+        KnownFormat::Png => png::decode(bytes, opts),
+        _ => {
+            let _ = (bytes, opts);
+            Err(Error::UnsupportedFormat)
+        }
+    }
 }
