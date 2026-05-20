@@ -126,6 +126,10 @@ pub const GDK_COLORSPACE_RGB: c_int = 0;
 
 pub const GDK_PIXBUF_FORMAT_THREADSAFE: u32 = 1 << 2;
 
+// Production build: the cdylib leaves these symbols undefined and
+// the dynamic linker resolves them against libgdk_pixbuf-2.0 /
+// libgobject-2.0 / libglib-2.0 in the host process at dlopen time.
+#[cfg(not(test))]
 unsafe extern "C" {
     pub fn gdk_pixbuf_new_from_bytes(
         data: *mut GBytes,
@@ -137,8 +141,13 @@ unsafe extern "C" {
         rowstride: c_int,
     ) -> *mut GdkPixbuf;
 
+    pub fn gdk_pixbuf_get_width(pixbuf: *mut GdkPixbuf) -> c_int;
+    pub fn gdk_pixbuf_get_height(pixbuf: *mut GdkPixbuf) -> c_int;
+
     pub fn g_bytes_new(data: *const c_void, size: usize) -> *mut GBytes;
     pub fn g_bytes_unref(bytes: *mut GBytes);
+
+    pub fn g_object_unref(object: *mut c_void);
 
     pub fn g_set_error_literal(
         err: *mut *mut GError,
@@ -147,4 +156,73 @@ unsafe extern "C" {
         message: *const c_char,
     );
     pub fn g_quark_from_static_string(string: *const c_char) -> u32;
+}
+
+// Test build: provide stub implementations so the test binary links
+// and runs without libgdk_pixbuf-2.0 on the system. None of our
+// unit tests actually invoke decode paths that reach into these,
+// they just need to be present at link time.
+#[cfg(test)]
+pub use test_stubs::*;
+
+#[cfg(test)]
+mod test_stubs {
+    use super::{GBytes, GError, GdkPixbuf};
+    use std::ffi::{c_char, c_int, c_void};
+
+    /// # Safety
+    /// Pixbuf creation is stubbed; always returns NULL in tests.
+    pub unsafe extern "C" fn gdk_pixbuf_new_from_bytes(
+        _: *mut GBytes,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+    ) -> *mut GdkPixbuf {
+        std::ptr::null_mut()
+    }
+
+    /// # Safety
+    /// Stub; returns 0.
+    pub unsafe extern "C" fn gdk_pixbuf_get_width(_: *mut GdkPixbuf) -> c_int {
+        0
+    }
+
+    /// # Safety
+    /// Stub; returns 0.
+    pub unsafe extern "C" fn gdk_pixbuf_get_height(_: *mut GdkPixbuf) -> c_int {
+        0
+    }
+
+    /// # Safety
+    /// Stub; returns NULL.
+    pub unsafe extern "C" fn g_bytes_new(_: *const c_void, _: usize) -> *mut GBytes {
+        std::ptr::null_mut()
+    }
+
+    /// # Safety
+    /// Stub; no-op.
+    pub unsafe extern "C" fn g_bytes_unref(_: *mut GBytes) {}
+
+    /// # Safety
+    /// Stub; no-op.
+    pub unsafe extern "C" fn g_object_unref(_: *mut c_void) {}
+
+    /// # Safety
+    /// Stub; no-op.
+    pub unsafe extern "C" fn g_set_error_literal(
+        _: *mut *mut GError,
+        _: u32,
+        _: c_int,
+        _: *const c_char,
+    ) {
+    }
+
+    /// # Safety
+    /// Stub; returns a fixed nonzero quark.
+    pub unsafe extern "C" fn g_quark_from_static_string(_: *const c_char) -> u32 {
+        1
+    }
 }

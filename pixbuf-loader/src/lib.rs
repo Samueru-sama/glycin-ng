@@ -18,8 +18,9 @@
 mod convert;
 mod ffi;
 
-use std::ffi::{CString, c_char, c_int, c_void};
+use std::ffi::{CString, c_char, c_int, c_uint, c_void};
 use std::ptr;
+use std::slice;
 use std::sync::OnceLock;
 
 use glycin_ng::{Image, Loader};
@@ -27,7 +28,8 @@ use glycin_ng::{Image, Loader};
 use crate::convert::texture_to_rgba8;
 use crate::ffi::{
     GDK_COLORSPACE_RGB, GDK_PIXBUF_FORMAT_THREADSAFE, GError, GdkPixbuf, GdkPixbufFormat,
-    GdkPixbufModule, GdkPixbufModulePattern,
+    GdkPixbufModule, GdkPixbufModulePattern, GdkPixbufModulePreparedFunc,
+    GdkPixbufModuleSizeFunc, GdkPixbufModuleUpdatedFunc,
 };
 
 /// Populate the supplied module's vtable with our entry points.
@@ -48,9 +50,9 @@ pub unsafe extern "C" fn fill_vtable(module: *mut GdkPixbufModule) {
     unsafe {
         (*module).load = Some(load);
         (*module).load_xpm_data = None;
-        (*module).begin_load = None;
-        (*module).stop_load = None;
-        (*module).load_increment = None;
+        (*module).begin_load = Some(begin_load);
+        (*module).stop_load = Some(stop_load);
+        (*module).load_increment = Some(load_increment);
         (*module).load_animation = None;
         (*module).save = None;
         (*module).save_to_callback = None;
@@ -269,6 +271,114 @@ fn extensions() -> &'static [*const c_char] {
     &inner.0
 }
 
+/// Incremental loading state owned by gdk-pixbuf. Returned from
+/// [`begin_load`] as an opaque `gpointer`, mutated by
+/// [`load_increment`], consumed by [`stop_load`].
+///
+/// glycin-ng decoders are not streaming, so we accumulate the entire
+/// input buffer here and decode it in one shot on `stop_load`. The
+/// `prepared_func` and `updated_func` callbacks fire once at that
+/// point with the fully-decoded pixbuf.
+struct LoadContext {
+    buffer: Vec<u8>,
+    size_func: Option<GdkPixbufModuleSizeFunc>,
+    prepared_func: Option<GdkPixbufModulePreparedFunc>,
+    updated_func: Option<GdkPixbufModuleUpdatedFunc>,
+    user_data: *mut c_void,
+}
+
+unsafe extern "C" fn begin_load(
+    size_func: Option<GdkPixbufModuleSizeFunc>,
+    prepared_func: Option<GdkPixbufModulePreparedFunc>,
+    updated_func: Option<GdkPixbufModuleUpdatedFunc>,
+    user_data: *mut c_void,
+    _error: *mut *mut GError,
+) -> *mut c_void {
+    let ctx = Box::new(LoadContext {
+        buffer: Vec::new(),
+        size_func,
+        prepared_func,
+        updated_func,
+        user_data,
+    });
+    Box::into_raw(ctx) as *mut c_void
+}
+
+unsafe extern "C" fn load_increment(
+    context: *mut c_void,
+    buf: *const u8,
+    size: c_uint,
+    error: *mut *mut GError,
+) -> c_int {
+    if context.is_null() {
+        unsafe { set_error(error, "load_increment called with null context") };
+        return 0;
+    }
+    if buf.is_null() || size == 0 {
+        return 1;
+    }
+    let ctx = unsafe { &mut *(context as *mut LoadContext) };
+    let slice = unsafe { slice::from_raw_parts(buf, size as usize) };
+    ctx.buffer.extend_from_slice(slice);
+    1
+}
+
+unsafe extern "C" fn stop_load(
+    context: *mut c_void,
+    error: *mut *mut GError,
+) -> c_int {
+    if context.is_null() {
+        unsafe { set_error(error, "stop_load called with null context") };
+        return 0;
+    }
+    let ctx = unsafe { Box::from_raw(context as *mut LoadContext) };
+    let LoadContext {
+        buffer,
+        size_func,
+        prepared_func,
+        updated_func,
+        user_data,
+    } = *ctx;
+
+    let image = match Loader::new_bytes(buffer).load() {
+        Ok(img) => img,
+        Err(e) => {
+            unsafe { set_error(error, &e.to_string()) };
+            return 0;
+        }
+    };
+
+    let pixbuf = unsafe { image_to_pixbuf(&image, error) };
+    if pixbuf.is_null() {
+        return 0;
+    }
+
+    // Optional size hint. Callers that don't care leave `size_func`
+    // NULL; we still report the actual dimensions so resize callbacks
+    // can apply.
+    if let Some(size_func) = size_func {
+        let mut w = unsafe { crate::ffi::gdk_pixbuf_get_width(pixbuf) };
+        let mut h = unsafe { crate::ffi::gdk_pixbuf_get_height(pixbuf) };
+        unsafe { size_func(&mut w, &mut h, user_data) };
+    }
+
+    if let Some(prepared) = prepared_func {
+        unsafe { prepared(pixbuf, ptr::null_mut(), user_data) };
+    }
+    if let Some(updated) = updated_func {
+        let w = unsafe { crate::ffi::gdk_pixbuf_get_width(pixbuf) };
+        let h = unsafe { crate::ffi::gdk_pixbuf_get_height(pixbuf) };
+        unsafe { updated(pixbuf, 0, 0, w, h, user_data) };
+    }
+
+    // The prepared callback inside GdkPixbufLoader takes its own ref
+    // via g_object_ref; release ours so the only outstanding ref
+    // belongs to the consumer.
+    unsafe { crate::ffi::g_object_unref(pixbuf as *mut c_void) };
+
+    1
+}
+
 /// `GdkPixbufModuleLoadFunc`: read the entire image from a `FILE*`
 /// stream, decode through glycin-ng, and hand back a freshly
 /// allocated `GdkPixbuf`.
@@ -377,3 +487,150 @@ unsafe fn set_error(error: *mut *mut GError, msg: &str) {
         crate::ffi::g_set_error_literal(error, domain, 0, cmsg.as_ptr());
     }
 }
+
+#[cfg(test)]
+mod incremental_tests {
+    //! Verify that the vtable wiring routes begin/increment/stop to
+    //! the right functions, that the accumulator concatenates chunks
+    //! in order, and that null/empty inputs are handled.
+    //!
+    //! These tests stop short of calling `stop_load` because the
+    //! final decode reaches into `gdk_pixbuf_new_from_bytes` and
+    //! friends, which require libgdk_pixbuf-2.0 at link time. Real
+    //! end-to-end coverage lives in the manual install path.
+
+    use super::*;
+    use std::ffi::c_void;
+
+    #[test]
+    fn begin_load_returns_non_null_context() {
+        let ctx = unsafe { begin_load(None, None, None, ptr::null_mut(), ptr::null_mut()) };
+        assert!(!ctx.is_null());
+        // Free the leaked LoadContext to satisfy miri / leak sanitizer.
+        let _ = unsafe { Box::from_raw(ctx as *mut LoadContext) };
+    }
+
+    #[test]
+    fn load_increment_appends_in_order() {
+        let ctx = unsafe { begin_load(None, None, None, ptr::null_mut(), ptr::null_mut()) };
+        let chunk_a: &[u8] = b"hello ";
+        let chunk_b: &[u8] = b"world";
+        let rc1 = unsafe {
+            load_increment(
+                ctx,
+                chunk_a.as_ptr(),
+                chunk_a.len() as c_uint,
+                ptr::null_mut(),
+            )
+        };
+        let rc2 = unsafe {
+            load_increment(
+                ctx,
+                chunk_b.as_ptr(),
+                chunk_b.len() as c_uint,
+                ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc1, 1);
+        assert_eq!(rc2, 1);
+
+        let restored = unsafe { Box::from_raw(ctx as *mut LoadContext) };
+        assert_eq!(restored.buffer, b"hello world");
+    }
+
+    #[test]
+    fn load_increment_ignores_zero_size_and_null_buf() {
+        let ctx = unsafe { begin_load(None, None, None, ptr::null_mut(), ptr::null_mut()) };
+        let rc_zero =
+            unsafe { load_increment(ctx, b"x".as_ptr(), 0, ptr::null_mut()) };
+        let rc_null = unsafe { load_increment(ctx, ptr::null(), 4, ptr::null_mut()) };
+        assert_eq!(rc_zero, 1);
+        assert_eq!(rc_null, 1);
+        let restored = unsafe { Box::from_raw(ctx as *mut LoadContext) };
+        assert!(restored.buffer.is_empty());
+    }
+
+    #[test]
+    fn load_increment_rejects_null_context() {
+        let rc = unsafe {
+            load_increment(
+                ptr::null_mut(),
+                b"x".as_ptr(),
+                1,
+                ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn fill_vtable_wires_incremental_callbacks() {
+        let mut module = GdkPixbufModule {
+            module_name: ptr::null_mut(),
+            module_path: ptr::null_mut(),
+            module: ptr::null_mut(),
+            info: ptr::null_mut(),
+            load: None,
+            load_xpm_data: None,
+            begin_load: None,
+            stop_load: None,
+            load_increment: None,
+            load_animation: None,
+            save: None,
+            save_to_callback: None,
+            is_save_option_supported: None,
+            _reserved1: None,
+            _reserved2: None,
+            _reserved3: None,
+            _reserved4: None,
+        };
+        unsafe { fill_vtable(&mut module) };
+        assert!(module.load.is_some());
+        assert!(module.begin_load.is_some());
+        assert!(module.load_increment.is_some());
+        assert!(module.stop_load.is_some());
+        assert!(module.load_animation.is_none());
+        assert!(module.save.is_none());
+    }
+
+    #[test]
+    fn fill_vtable_is_safe_on_null_module() {
+        unsafe { fill_vtable(ptr::null_mut()) };
+    }
+
+    extern "C" fn never_called_size(_: *mut c_int, _: *mut c_int, _: *mut c_void) {}
+    extern "C" fn never_called_prepared(
+        _: *mut GdkPixbuf,
+        _: *mut c_void,
+        _: *mut c_void,
+    ) {
+    }
+    extern "C" fn never_called_updated(
+        _: *mut GdkPixbuf,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+        _: c_int,
+        _: *mut c_void,
+    ) {
+    }
+
+    #[test]
+    fn callbacks_are_remembered_across_begin_and_stop() {
+        let ctx = unsafe {
+            begin_load(
+                Some(never_called_size),
+                Some(never_called_prepared),
+                Some(never_called_updated),
+                0xdead_beef as *mut c_void,
+                ptr::null_mut(),
+            )
+        };
+        let restored = unsafe { Box::from_raw(ctx as *mut LoadContext) };
+        assert!(restored.size_func.is_some());
+        assert!(restored.prepared_func.is_some());
+        assert!(restored.updated_func.is_some());
+        assert_eq!(restored.user_data as usize, 0xdead_beef);
+    }
+}
+

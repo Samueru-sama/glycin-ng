@@ -50,10 +50,11 @@ gdk-pixbuf's calling thread) stays unrestricted.
 
 ## Limitations
 
-- Incremental loading (`begin_load` / `load_increment` / `stop_load`)
-  is not implemented. Full-buffer `load(FILE*)` only. Consumers that
-  rely on streaming partial decodes (some progressive previews) will
-  fall back to whichever loader is registered next.
+- Incremental loading is wired (`begin_load` / `load_increment` /
+  `stop_load`), but the worker accumulates the full buffer before
+  decoding, so the `prepared` and `updated` callbacks fire only
+  once at end-of-stream. Per-row progressive previews would require
+  a streaming decoder behind every format.
 - `load_animation` is unimplemented; animated GIF/WebP/APNG return
   only their first frame.
 - Output is always RGBA8. Higher bit depths and float formats from
