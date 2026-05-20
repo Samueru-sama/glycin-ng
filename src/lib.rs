@@ -21,7 +21,8 @@
 //! Sandbox layers (default on, Linux only): `landlock`, `seccomp`.
 //!
 //! Per-format gates (default on): `png`, `jpeg`, `gif`, `webp`,
-//! `tiff`, `bmp`, `ico`, `tga`, `qoi`, `exr`, `pnm`, `dds`, `jxl`.
+//! `tiff`, `bmp`, `ico`, `tga`, `qoi`, `exr`, `pnm`, `dds`, `jxl`,
+//! `svg`.
 //!
 //! C ABI surface (off by default): `c-api`. Enables the `cdylib`
 //! and the C bindings.

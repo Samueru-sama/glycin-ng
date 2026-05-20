@@ -37,8 +37,9 @@ other platforms).
 | PNM / PBM / PGM / PPM| image           | MIT / Apache-2 |
 | DDS                  | image           | MIT / Apache-2 |
 | JPEG XL              | jxl-oxide       | BSD-3-Clause   |
+| SVG                  | resvg / usvg    | MIT / Apache-2 |
 
-Deferred (no permissive decoder available): SVG, HEIF, AVIF, RAW.
+Deferred (no permissive decoder available): HEIF, AVIF, RAW.
 
 ## Quick start (Rust)
 
@@ -127,7 +128,7 @@ Capability groups: `decode` (default), `encode` (off), `metadata`
 Sandbox layers: `landlock`, `seccomp` (both default, Linux only).
 
 Per-format: `png`, `jpeg`, `gif`, `webp`, `tiff`, `bmp`, `ico`,
-`tga`, `qoi`, `exr`, `pnm`, `dds`, `jxl` (all default).
+`tga`, `qoi`, `exr`, `pnm`, `dds`, `jxl`, `svg` (all default).
 
 C ABI: `c-api` (off by default; turn on to expose
 `libglycin_ng.so`).
