@@ -134,8 +134,12 @@ impl Loader {
             limits,
             apply_transformations,
         };
-        let _ = sandbox;
-        dispatch(format, &bytes, &opts)
+        let (mut image, posture) =
+            crate::sandbox::run_in_worker(sandbox, limits, move || {
+                dispatch(format, &bytes, &opts)
+            })?;
+        image.set_sandbox_posture(posture);
+        Ok(image)
     }
 }
 

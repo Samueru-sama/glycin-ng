@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::MemoryFormat;
+use crate::{MemoryFormat, SandboxPosture};
 
 /// EXIF orientation values, in TIFF orientation-tag order.
 ///
@@ -193,6 +193,7 @@ pub struct Image {
     icc_profile: Option<Vec<u8>>,
     exif: Option<Vec<u8>>,
     frames: Vec<Frame>,
+    sandbox_posture: SandboxPosture,
 }
 
 #[allow(dead_code)]
@@ -211,6 +212,7 @@ impl Image {
             icc_profile: None,
             exif: None,
             frames,
+            sandbox_posture: SandboxPosture::none(),
         }
     }
 
@@ -224,6 +226,10 @@ impl Image {
 
     pub(crate) fn set_exif(&mut self, exif: Vec<u8>) {
         self.exif = Some(exif);
+    }
+
+    pub(crate) fn set_sandbox_posture(&mut self, posture: SandboxPosture) {
+        self.sandbox_posture = posture;
     }
 }
 
@@ -276,6 +282,11 @@ impl Image {
     /// Whether the image is animated (more than one frame).
     pub fn is_animated(&self) -> bool {
         self.frames.len() > 1
+    }
+
+    /// Sandbox posture that was active during decode.
+    pub fn sandbox_posture(&self) -> SandboxPosture {
+        self.sandbox_posture
     }
 }
 
