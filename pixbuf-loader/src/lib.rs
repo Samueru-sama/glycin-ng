@@ -161,6 +161,26 @@ const SIG_DEFS: &[SigDef] = &[
         mask: None,
         relevance: 100,
     },
+    // ICO: magic 00 00 01 00. Placeholder bytes at NUL positions
+    // ('a'), mask 'z' asserts each placeholder byte is actually 0 in
+    // the input; 'x' at position 2 enforces the literal 0x01.
+    SigDef {
+        prefix: b"aa\x01a\0",
+        mask: Some(b"zzxz\0"),
+        relevance: 100,
+    },
+    // CUR: magic 00 00 02 00.
+    SigDef {
+        prefix: b"aa\x02a\0",
+        mask: Some(b"zzxz\0"),
+        relevance: 100,
+    },
+    // JXL container box: 00 00 00 0c 4A 58 4C 20 0D 0A 87 0A.
+    SigDef {
+        prefix: b"aaa\x0cJXL \r\n\x87\n\0",
+        mask: Some(b"zzzxxxxxxxxx\0"),
+        relevance: 100,
+    },
 ];
 
 struct Patterns(Vec<GdkPixbufModulePattern>);
