@@ -34,6 +34,8 @@ mod png;
 mod pnm;
 #[cfg(feature = "qoi")]
 mod qoi;
+#[cfg(feature = "svg")]
+mod svg;
 #[cfg(feature = "tga")]
 mod tga;
 #[cfg(feature = "tiff")]
@@ -84,6 +86,8 @@ pub(crate) fn dispatch(
         KnownFormat::Dds => dds::decode(bytes, opts),
         #[cfg(feature = "jxl")]
         KnownFormat::Jxl => jxl::decode(bytes, opts),
+        #[cfg(feature = "svg")]
+        KnownFormat::Svg => svg::decode(bytes, opts),
         #[allow(unreachable_patterns)]
         _ => {
             let _ = (bytes, opts);

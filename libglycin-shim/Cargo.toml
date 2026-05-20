@@ -13,7 +13,6 @@ path = "src/lib.rs"
 
 [dependencies]
 libc = "0.2"
-resvg = { version = "0.47", default-features = false, optional = true }
 
 [dependencies.glycin-ng]
 path = ".."
@@ -33,11 +32,8 @@ features = [
   "pnm",
   "qoi",
   "seccomp",
+  "svg",
   "tga",
   "tiff",
   "webp",
 ]
-
-[features]
-default = []
-svg = ["dep:resvg"]

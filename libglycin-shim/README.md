@@ -90,17 +90,6 @@ every caller that uses these handles strictly through the `gly_*`
 C surface; consumers that introspect via `G_TYPE_CHECK_INSTANCE_*`
 will not see a `GLY_TYPE_LOADER` derivation.
 
-## Optional features
-
-| Feature | Adds | License added |
-|---|---|---|
-| `svg` | SVG rasterization via `resvg`/`usvg` (and `tiny-skia`) | MIT/Apache-2.0 + BSD-3-Clause - still permissive |
-
-Without `svg`, SVG inputs return `GLY_LOADER_ERROR_UNKNOWN_IMAGE_FORMAT`
-and consumers like GTK abort during icon-theme load. Enable it for
-any AppImage that embeds a GTK app.
-
 ## License
 
-MIT OR Apache-2.0, matching the parent crate. All optional features
-keep the same permissive contract.
+MIT OR Apache-2.0, matching the parent crate.

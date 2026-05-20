@@ -34,6 +34,8 @@ pub enum KnownFormat {
     Dds,
     /// JPEG XL, codestream or container.
     Jxl,
+    /// Scalable Vector Graphics.
+    Svg,
 }
 
 impl KnownFormat {
@@ -53,6 +55,7 @@ impl KnownFormat {
             Self::Pnm => "pnm",
             Self::Dds => "dds",
             Self::Jxl => "jxl",
+            Self::Svg => "svg",
         }
     }
 
@@ -72,6 +75,7 @@ impl KnownFormat {
             "pbm" | "pgm" | "ppm" | "pnm" | "pam" => Some(Self::Pnm),
             "dds" => Some(Self::Dds),
             "jxl" => Some(Self::Jxl),
+            "svg" | "svgz" => Some(Self::Svg),
             _ => None,
         }
     }
@@ -121,7 +125,50 @@ pub fn detect(buf: &[u8]) -> Option<KnownFormat> {
     {
         return Some(KnownFormat::Jxl);
     }
+    if looks_like_svg(buf) {
+        return Some(KnownFormat::Svg);
+    }
     None
+}
+
+fn looks_like_svg(buf: &[u8]) -> bool {
+    let probe = &buf[..buf.len().min(512)];
+    let probe = probe.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(probe);
+    let probe = strip_leading_whitespace(probe);
+    if probe.starts_with(b"<?xml") {
+        return find_svg_open_tag(probe);
+    }
+    starts_with_svg_open_tag(probe)
+}
+
+fn strip_leading_whitespace(b: &[u8]) -> &[u8] {
+    let mut i = 0;
+    while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\r' | b'\n') {
+        i += 1;
+    }
+    &b[i..]
+}
+
+fn starts_with_svg_open_tag(b: &[u8]) -> bool {
+    if !b.starts_with(b"<svg") {
+        return false;
+    }
+    matches!(b.get(4), Some(b' ' | b'\t' | b'\r' | b'\n' | b'>' | b'/'))
+}
+
+fn find_svg_open_tag(haystack: &[u8]) -> bool {
+    let needle = b"<svg";
+    if haystack.len() < needle.len() {
+        return false;
+    }
+    for i in 0..=haystack.len() - needle.len() {
+        if &haystack[i..i + needle.len()] == needle
+            && starts_with_svg_open_tag(&haystack[i..])
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn starts_with(buf: &[u8], prefix: &[u8]) -> bool {
@@ -217,6 +264,26 @@ mod tests {
         assert_eq!(detect(b"\xff\x0a..."), Some(KnownFormat::Jxl));
         let container = b"\0\0\0\x0cJXL \r\n\x87\n";
         assert_eq!(detect(container), Some(KnownFormat::Jxl));
+    }
+
+    #[test]
+    fn detects_svg() {
+        assert_eq!(detect(b"<svg/>"), Some(KnownFormat::Svg));
+        assert_eq!(detect(b"<svg "), Some(KnownFormat::Svg));
+        assert_eq!(detect(b"  \n<svg width=\"10\"/>"), Some(KnownFormat::Svg));
+        assert_eq!(
+            detect(b"<?xml version=\"1.0\"?><svg/>"),
+            Some(KnownFormat::Svg)
+        );
+        let mut bom = vec![0xEF, 0xBB, 0xBF];
+        bom.extend_from_slice(b"<svg/>");
+        assert_eq!(detect(&bom), Some(KnownFormat::Svg));
+    }
+
+    #[test]
+    fn rejects_non_svg_xml() {
+        assert_eq!(detect(b"<?xml version=\"1.0\"?><html/>"), None);
+        assert_eq!(detect(b"<svgno"), None);
     }
 
     #[test]

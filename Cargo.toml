@@ -58,6 +58,11 @@ optional = true
 version = "0.4"
 optional = true
 
+[dependencies.resvg]
+version = "0.47"
+default-features = false
+optional = true
+
 [dependencies.tiff]
 version = "0.11"
 optional = true
@@ -90,6 +95,7 @@ default = [
   "pnm",
   "qoi",
   "seccomp",
+  "svg",
   "tga",
   "tiff",
   "webp",
@@ -114,6 +120,7 @@ jxl = ["dep:jxl-oxide"]
 png = ["dep:png"]
 pnm = ["dep:image"]
 qoi = ["dep:qoi"]
+svg = ["dep:resvg"]
 tga = ["dep:image"]
 tiff = ["dep:tiff"]
 webp = ["dep:image-webp"]
