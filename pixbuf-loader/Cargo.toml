@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.87"
 description = "gdk-pixbuf loader module backed by glycin-ng"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
