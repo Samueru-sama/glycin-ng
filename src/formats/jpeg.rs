@@ -88,6 +88,7 @@ mod tests {
         let opts = DecodeOptions {
             limits: crate::Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         };
         let err = decode(b"not a jpeg", &opts).unwrap_err();
         assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));
@@ -98,6 +99,7 @@ mod tests {
         let opts = DecodeOptions {
             limits: crate::Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         };
         let err = decode(b"", &opts).unwrap_err();
         assert!(matches!(err, Error::Malformed(_) | Error::Io(_)));

@@ -18,6 +18,7 @@ mod tests {
         let opts = DecodeOptions {
             limits: Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         };
         let err = decode(b"BMxx", &opts).unwrap_err();
         assert!(

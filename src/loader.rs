@@ -41,6 +41,7 @@ pub struct Loader {
     limits: Limits,
     sandbox: SandboxSelector,
     apply_transformations: bool,
+    render_size_hint: Option<(u32, u32)>,
 }
 
 impl Loader {
@@ -73,7 +74,18 @@ impl Loader {
             limits: Limits::default(),
             sandbox: SandboxSelector::default(),
             apply_transformations: true,
+            render_size_hint: None,
         }
+    }
+
+    /// Request the decoder render at a specific output size in pixels.
+    ///
+    /// Only resolution-independent formats (SVG) honor this; raster
+    /// formats decode at their native size. The decoder still rejects
+    /// the request if `width * height` would exceed [`Limits`].
+    pub fn render_size_hint(mut self, width: u32, height: u32) -> Self {
+        self.render_size_hint = Some((width, height));
+        self
     }
 
     /// Replace the limits applied to this decode.
@@ -120,6 +132,7 @@ impl Loader {
             limits,
             sandbox,
             apply_transformations,
+            render_size_hint,
         } = self;
         let bytes = source.read_all()?;
         let format = format_hint
@@ -133,6 +146,7 @@ impl Loader {
         let opts = DecodeOptions {
             limits,
             apply_transformations,
+            render_size_hint,
         };
         let (mut image, posture) = crate::sandbox::run_in_worker(sandbox, limits, move || {
             dispatch(format, &bytes, &opts)

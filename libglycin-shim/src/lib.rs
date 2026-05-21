@@ -21,17 +21,16 @@ mod memformat;
 mod types;
 
 use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_void};
-use std::path::PathBuf;
 use std::ptr;
 use std::slice;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use glycin_ng::Loader;
 
 use crate::ffi::{
     GBytes, GError, GFile, GInputStream, GObject, GQuark, GStrv, GType, gboolean, gpointer,
 };
-use crate::types::{FrameRequestState, FrameState, ImageState, LoaderState};
+use crate::types::{FrameRequestState, FrameState, ImageState, LoaderState, Rerender};
 
 const STATE_KEY: &CStr = c"glycin_ng_state";
 
@@ -115,8 +114,17 @@ pub unsafe extern "C" fn gly_loader_new(file: *mut GFile) -> *mut GObject {
         .to_string_lossy()
         .into_owned();
     unsafe { ffi::g_free(path_ptr as *mut c_void) };
-    let loader = Loader::new_path(PathBuf::from(path_owned));
-    unsafe { attach_state(LoaderState::new(loader)) }
+    // Read the file eagerly so we retain the source bytes for a
+    // possible later re-decode at a caller-requested scale. The
+    // `Loader::new_bytes` path is the same one the existing flow
+    // would have used after `Loader::new_path` lazily read the file.
+    let bytes = match std::fs::read(&path_owned) {
+        Ok(b) => b,
+        Err(_) => return ptr::null_mut(),
+    };
+    let source_bytes: Arc<[u8]> = Arc::from(bytes.clone().into_boxed_slice());
+    let loader = Loader::new_bytes(bytes);
+    unsafe { attach_state(LoaderState::new(loader, Some(source_bytes))) }
 }
 
 /// # Safety
@@ -132,8 +140,9 @@ pub unsafe extern "C" fn gly_loader_new_for_bytes(bytes: *mut GBytes) -> *mut GO
         return ptr::null_mut();
     }
     let vec = unsafe { slice::from_raw_parts(data as *const u8, size) }.to_vec();
+    let source_bytes: Arc<[u8]> = Arc::from(vec.clone().into_boxed_slice());
     let loader = Loader::new_bytes(vec);
-    unsafe { attach_state(LoaderState::new(loader)) }
+    unsafe { attach_state(LoaderState::new(loader, Some(source_bytes))) }
 }
 
 /// # Safety
@@ -167,8 +176,9 @@ pub unsafe extern "C" fn gly_loader_new_for_stream(stream: *mut GInputStream) ->
         }
         buf.extend_from_slice(&chunk[..n as usize]);
     }
+    let source_bytes: Arc<[u8]> = Arc::from(buf.clone().into_boxed_slice());
     let loader = Loader::new_bytes(buf);
-    unsafe { attach_state(LoaderState::new(loader)) }
+    unsafe { attach_state(LoaderState::new(loader, Some(source_bytes))) }
 }
 
 // ----- gly_loader_set_* -----
@@ -240,6 +250,7 @@ pub unsafe extern "C" fn gly_loader_load(
     let apply = *state.apply_transformations.lock().unwrap();
     let limits = *state.limits.lock().unwrap();
     let accepted = *state.accepted_memory_formats.lock().unwrap();
+    let source_bytes = state.source_bytes.clone();
 
     let configured = inner.apply_transformations(apply).limits(limits);
 
@@ -256,13 +267,33 @@ pub unsafe extern "C" fn gly_loader_load(
                     .collect();
                 image.replace_frames(new_frames, width, height);
             }
-            unsafe { attach_state(ImageState::new(image)) }
+            // Vector formats can be re-rendered when the consumer
+            // later requests a different scale; raster decoders
+            // ignore the hint anyway, so we only stash bytes for
+            // formats that can usefully take it.
+            let rerender = source_bytes.and_then(|bytes| {
+                if is_rescalable_format(image.format_name()) {
+                    Some(Rerender {
+                        source_bytes: bytes,
+                        limits,
+                        apply_transformations: apply,
+                        accepted_memory_formats: accepted,
+                    })
+                } else {
+                    None
+                }
+            });
+            unsafe { attach_state(ImageState::new(image, rerender)) }
         }
         Err(e) => {
             unsafe { set_error(error, 0, &e.to_string()) };
             ptr::null_mut()
         }
     }
+}
+
+fn is_rescalable_format(name: &str) -> bool {
+    matches!(name, "svg")
 }
 
 // ----- gly_image_get_* -----
@@ -326,9 +357,41 @@ pub unsafe extern "C" fn gly_image_get_specific_frame(
         unsafe { set_error(error, 0, "null image") };
         return ptr::null_mut();
     };
-    let loop_animation = unsafe { state_ref::<FrameRequestState>(frame_request) }
+    let request_state = unsafe { state_ref::<FrameRequestState>(frame_request) };
+    let loop_animation = request_state
         .map(|s| *s.loop_animation.lock().unwrap())
         .unwrap_or(true);
+    let scale = request_state.and_then(|s| *s.scale.lock().unwrap());
+
+    // If this is a vector format and the caller asked for a different
+    // size, re-decode at that size. Falling back to the cached frame
+    // would force gdk-pixbuf to bitmap-stretch the intrinsic size,
+    // which is what made symbolic icons look blurry next to upstream
+    // glycin's librsvg-backed output.
+    if let Some(rerender) = img_state.rerender.as_ref()
+        && let Some((sw, sh)) = scale
+        && sw > 0
+        && sh > 0
+        && (sw != img_state.image.width() || sh != img_state.image.height())
+    {
+        let bytes = rerender.source_bytes.to_vec();
+        let result = Loader::new_bytes(bytes)
+            .apply_transformations(rerender.apply_transformations)
+            .limits(rerender.limits)
+            .render_size_hint(sw, sh)
+            .load();
+        if let Ok(image) = result
+            && let Some(mut frame) = image.frames().first().cloned()
+        {
+            if rerender.accepted_memory_formats != 0 {
+                frame = convert::maybe_convert(frame, rerender.accepted_memory_formats);
+            }
+            return unsafe { attach_state(FrameState { frame }) };
+        }
+        // Re-decode failed; fall through to the cached frame so the
+        // caller still gets a pixbuf rather than NULL.
+    }
+
     let idx = match img_state.advance(loop_animation) {
         Some(i) => i,
         None => {

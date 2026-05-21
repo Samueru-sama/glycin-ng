@@ -54,6 +54,7 @@ mod tests {
         DecodeOptions {
             limits: Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         }
     }
 
@@ -91,6 +92,7 @@ mod tests {
             &DecodeOptions {
                 limits,
                 apply_transformations: true,
+                render_size_hint: None,
             },
         )
         .unwrap_err();

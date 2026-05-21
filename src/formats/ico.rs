@@ -18,6 +18,7 @@ mod tests {
         let opts = DecodeOptions {
             limits: Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         };
         let err = decode(b"\x00\x00\x01\x00garbage", &opts).unwrap_err();
         assert!(matches!(

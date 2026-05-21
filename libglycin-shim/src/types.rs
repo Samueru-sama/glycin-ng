@@ -1,6 +1,6 @@
 //! Internal handle types attached to the GObjects we hand out.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use glycin_ng::{Frame, Image, Limits, Loader};
 
@@ -14,15 +14,23 @@ pub(crate) struct LoaderState {
     /// they accept. `0` means the call was never made; we then leave
     /// the decoded format alone.
     pub(crate) accepted_memory_formats: Mutex<u32>,
+    /// Original source bytes, retained so resolution-independent
+    /// formats (SVG) can be re-decoded at a different size when the
+    /// consumer calls `gly_frame_request_set_scale` after
+    /// `gly_loader_load`. `None` if reading the source failed at
+    /// `gly_loader_new` time; the inner `Loader` may still succeed
+    /// from its own source.
+    pub(crate) source_bytes: Option<Arc<[u8]>>,
 }
 
 impl LoaderState {
-    pub(crate) fn new(loader: Loader) -> Self {
+    pub(crate) fn new(loader: Loader, source_bytes: Option<Arc<[u8]>>) -> Self {
         Self {
             inner: Mutex::new(Some(loader)),
             apply_transformations: Mutex::new(true),
             limits: Mutex::new(Limits::default()),
             accepted_memory_formats: Mutex::new(0),
+            source_bytes,
         }
     }
 }
@@ -33,13 +41,29 @@ impl LoaderState {
 pub(crate) struct ImageState {
     pub(crate) image: Image,
     pub(crate) cursor: Mutex<usize>,
+    /// Inputs the original decode used, kept so a later
+    /// `gly_image_get_specific_frame` can re-decode at a caller-
+    /// requested scale. Only populated for resolution-independent
+    /// formats; raster decoders ignore the scale hint and gdk-pixbuf
+    /// scales their bitmap output itself.
+    pub(crate) rerender: Option<Rerender>,
+}
+
+/// Snapshot of the decode configuration needed to rebuild an SVG
+/// (or similar vector format) at a different output size.
+pub(crate) struct Rerender {
+    pub(crate) source_bytes: Arc<[u8]>,
+    pub(crate) limits: Limits,
+    pub(crate) apply_transformations: bool,
+    pub(crate) accepted_memory_formats: u32,
 }
 
 impl ImageState {
-    pub(crate) fn new(image: Image) -> Self {
+    pub(crate) fn new(image: Image, rerender: Option<Rerender>) -> Self {
         Self {
             image,
             cursor: Mutex::new(0),
+            rerender,
         }
     }
 

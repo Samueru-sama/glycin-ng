@@ -51,6 +51,20 @@ use crate::{Error, Image, Limits, Result};
 pub(crate) struct DecodeOptions {
     pub limits: Limits,
     pub apply_transformations: bool,
+    /// Caller-requested output size for resolution-independent formats
+    /// (SVG today). Raster decoders ignore this; gdk-pixbuf and GTK
+    /// scale their bitmap output themselves.
+    pub render_size_hint: Option<(u32, u32)>,
+}
+
+impl Default for DecodeOptions {
+    fn default() -> Self {
+        Self {
+            limits: Limits::default(),
+            apply_transformations: true,
+            render_size_hint: None,
+        }
+    }
 }
 
 /// Route a sniffed format to its decoder.

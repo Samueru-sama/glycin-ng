@@ -22,15 +22,20 @@ pub(crate) fn decode(bytes: &[u8], opts: &DecodeOptions) -> Result<Image> {
     let tree =
         Tree::from_data(svg_bytes, &parse_opt).map_err(|e| Error::Malformed(e.to_string()))?;
     let svg_size = tree.size();
-    let width = svg_size.width().ceil().max(1.0) as u32;
-    let height = svg_size.height().ceil().max(1.0) as u32;
+    let intrinsic_w = svg_size.width().ceil().max(1.0) as u32;
+    let intrinsic_h = svg_size.height().ceil().max(1.0) as u32;
+    let (width, height) = opts.render_size_hint.unwrap_or((intrinsic_w, intrinsic_h));
+    let width = width.max(1);
+    let height = height.max(1);
     opts.limits.check_dimensions(width, height, 1)?;
 
     let mut pixmap = Pixmap::new(width, height).ok_or_else(|| Error::Decoder {
         format: "svg",
         message: format!("failed to allocate {width}x{height} pixmap"),
     })?;
-    let transform = Transform::identity();
+    let sx = width as f32 / intrinsic_w as f32;
+    let sy = height as f32 / intrinsic_h as f32;
+    let transform = Transform::from_scale(sx, sy);
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
     let stride = width.checked_mul(4).ok_or(Error::LimitExceeded("stride"))?;
@@ -66,6 +71,7 @@ mod tests {
         DecodeOptions {
             limits: Limits::default(),
             apply_transformations: true,
+            render_size_hint: None,
         }
     }
 
@@ -121,6 +127,28 @@ mod tests {
     }
 
     #[test]
+    fn render_size_hint_scales_output() {
+        // 4x4 SVG rendered at 32x32 via the hint. The vector grid
+        // should fill the full pixmap, every pixel opaque red.
+        let bytes = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\"><rect width=\"4\" height=\"4\" fill=\"red\"/></svg>";
+        let image = decode(
+            bytes,
+            &DecodeOptions {
+                render_size_hint: Some((32, 32)),
+                ..DecodeOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(image.width(), 32);
+        assert_eq!(image.height(), 32);
+        let data = image.first_frame().unwrap().texture().data();
+        assert_eq!(data.len(), 32 * 32 * 4);
+        // Top-left pixel is fully-opaque red even though the source
+        // SVG was 4x4: vector scale, not bitmap stretch.
+        assert_eq!(&data[0..4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
     fn enforces_max_dimensions() {
         let bytes = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>"#;
         let limits = Limits {
@@ -132,6 +160,7 @@ mod tests {
             &DecodeOptions {
                 limits,
                 apply_transformations: true,
+                render_size_hint: None,
             },
         )
         .unwrap_err();
