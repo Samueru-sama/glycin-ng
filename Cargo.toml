@@ -1,15 +1,21 @@
 [package]
 name = "glycin-ng"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.87"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "Permissively-licensed Rust image decoder library with in-process sandboxing"
-license = "MIT OR Apache-2.0"
 keywords = ["decoder", "image", "landlock", "sandbox", "seccomp"]
 categories = ["encoding", "multimedia::images"]
 
 [workspace]
 members = [".", "libglycin-shim", "pixbuf-loader"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
