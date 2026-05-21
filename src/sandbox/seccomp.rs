@@ -66,6 +66,7 @@ fn build_filter(arch: seccompiler::TargetArch) -> Result<seccompiler::SeccompFil
     // those denied syscalls to be useful, so an unrestricted clone3
     // (which we have to allow because seccomp BPF cannot dereference
     // the clone_args struct) is largely defanged.
+    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_mut))]
     let mut allowed: Vec<i64> = vec![
         // Process and thread state.
         libc::SYS_exit,
@@ -134,7 +135,6 @@ fn build_filter(arch: seccompiler::TargetArch) -> Result<seccompiler::SeccompFil
         libc::SYS_fstatfs,
         libc::SYS_statx,
         libc::SYS_newfstatat,
-        libc::SYS_fadvise64,
         // File opening and metadata. Landlock, when active, restricts
         // which paths these can reach; without landlock they can read
         // anything the host user can. We document that posture via
@@ -167,7 +167,9 @@ fn build_filter(arch: seccompiler::TargetArch) -> Result<seccompiler::SeccompFil
 
     #[cfg(target_arch = "x86_64")]
     {
-        // Legacy aliases that glibc on x86_64 still calls into.
+        // Legacy aliases that glibc on x86_64 still calls into, plus
+        // syscalls that libc only defines on x86_64 in our pinned
+        // libc release (e.g. fadvise64).
         allowed.extend_from_slice(&[
             libc::SYS_arch_prctl,
             libc::SYS_access,
@@ -183,6 +185,7 @@ fn build_filter(arch: seccompiler::TargetArch) -> Result<seccompiler::SeccompFil
             libc::SYS_readlink,
             libc::SYS_signalfd,
             libc::SYS_time,
+            libc::SYS_fadvise64,
         ]);
     }
 
