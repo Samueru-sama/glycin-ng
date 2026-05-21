@@ -241,7 +241,13 @@ impl Image {
         self.sandbox_posture = posture;
     }
 
-    pub(crate) fn replace_frames(&mut self, frames: Vec<Frame>, width: u32, height: u32) {
+    /// Replace this image's decoded frames. Used by consumers that
+    /// post-process the texture (e.g. format conversion) and need to
+    /// hand back a different in-memory representation while keeping
+    /// the image's identity. `width` and `height` are taken from the
+    /// caller because the new frames may carry different dimensions
+    /// (typical case: untouched).
+    pub fn replace_frames(&mut self, frames: Vec<Frame>, width: u32, height: u32) {
         self.frames = frames;
         self.width = width;
         self.height = height;

@@ -15,6 +15,7 @@
 //! sidesteps full GType registration and is sufficient for
 //! everything Arch's gdk-pixbuf does with these handles.
 
+mod convert;
 mod ffi;
 mod memformat;
 mod types;
@@ -196,16 +197,22 @@ pub unsafe extern "C" fn gly_loader_set_apply_transformations(
     *state.apply_transformations.lock().unwrap() = apply != 0;
 }
 
+/// Record the bitmask of `GlyMemoryFormatSelection` values the
+/// caller accepts. On `gly_loader_load`, each decoded frame whose
+/// native format is not in the set is converted to a compatible
+/// format (when we know how) before being returned.
+///
 /// # Safety
-/// `loader` must be valid. The selection bitmask is currently
-/// ignored - glycin-ng decoders pick the native format.
+/// `loader` must be valid.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gly_loader_set_accepted_memory_formats(
-    _loader: *mut GObject,
-    _selection: c_uint,
+    loader: *mut GObject,
+    selection: c_uint,
 ) {
-    // Not yet wired: we always hand back the decoder's native
-    // memory format and let the host convert.
+    let Some(state) = (unsafe { state_ref::<LoaderState>(loader) }) else {
+        return;
+    };
+    *state.accepted_memory_formats.lock().unwrap() = selection;
 }
 
 // ----- gly_loader_load -----
@@ -232,11 +239,25 @@ pub unsafe extern "C" fn gly_loader_load(
 
     let apply = *state.apply_transformations.lock().unwrap();
     let limits = *state.limits.lock().unwrap();
+    let accepted = *state.accepted_memory_formats.lock().unwrap();
 
     let configured = inner.apply_transformations(apply).limits(limits);
 
     match configured.load() {
-        Ok(image) => unsafe { attach_state(ImageState::new(image)) },
+        Ok(mut image) => {
+            if accepted != 0 {
+                let width = image.width();
+                let height = image.height();
+                let new_frames: Vec<_> = image
+                    .frames()
+                    .iter()
+                    .cloned()
+                    .map(|f| convert::maybe_convert(f, accepted))
+                    .collect();
+                image.replace_frames(new_frames, width, height);
+            }
+            unsafe { attach_state(ImageState::new(image)) }
+        }
         Err(e) => {
             unsafe { set_error(error, 0, &e.to_string()) };
             ptr::null_mut()

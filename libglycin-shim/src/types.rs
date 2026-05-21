@@ -10,6 +10,10 @@ pub(crate) struct LoaderState {
     pub(crate) inner: Mutex<Option<Loader>>,
     pub(crate) apply_transformations: Mutex<bool>,
     pub(crate) limits: Mutex<Limits>,
+    /// Bitmask of `GlyMemoryFormatSelection` values the caller said
+    /// they accept. `0` means the call was never made; we then leave
+    /// the decoded format alone.
+    pub(crate) accepted_memory_formats: Mutex<u32>,
 }
 
 impl LoaderState {
@@ -18,6 +22,7 @@ impl LoaderState {
             inner: Mutex::new(Some(loader)),
             apply_transformations: Mutex::new(true),
             limits: Mutex::new(Limits::default()),
+            accepted_memory_formats: Mutex::new(0),
         }
     }
 }
