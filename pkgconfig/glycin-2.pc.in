@@ -1,0 +1,10 @@
+prefix=@PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: glycin-2
+Description: glycin-ng libglycin compat shim
+Version: @VERSION@
+Libs: -L${libdir} -lglycin-2
+Cflags: -I${includedir}/glycin-2
