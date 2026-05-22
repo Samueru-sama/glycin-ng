@@ -108,3 +108,25 @@ impl FrameRequestState {
         }
     }
 }
+
+/// State backing a `GlyCreator`. Holds frames to encode and encoding
+/// parameters.
+pub(crate) struct CreatorState {
+    pub(crate) mime_type: String,
+    pub(crate) frames: Mutex<Vec<FrameData>>,
+    pub(crate) quality: Mutex<u8>,
+    pub(crate) compression: Mutex<u8>,
+}
+
+pub(crate) struct FrameData {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) memory_format: i32,
+    pub(crate) data: Vec<u8>,
+    pub(crate) stride: u32,
+}
+
+/// State backing a `GlyEncodedImage`.
+pub(crate) struct EncodedImageState {
+    pub(crate) data: Vec<u8>,
+}

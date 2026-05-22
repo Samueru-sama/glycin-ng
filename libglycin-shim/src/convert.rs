@@ -219,6 +219,34 @@ fn emit_pixel(target: MemoryFormat, r: u8, g: u8, b: u8, a: u8, out: &mut Vec<u8
     }
 }
 
+/// Convert raw pixel data from the given `MemoryFormat` to flat RGBA8
+/// bytes (4 bytes per pixel, row-major, no padding between rows).
+/// Stride is the byte distance between the start of consecutive rows
+/// in the source. Returns `None` if the format is not supported.
+pub(crate) fn to_rgba8(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    stride: u32,
+    src_format: MemoryFormat,
+) -> Option<Vec<u8>> {
+    let bpp = src_format.bytes_per_pixel() as usize;
+    let out_stride = width as usize * 4;
+    let mut out = Vec::with_capacity(out_stride * height as usize);
+    let src_stride = stride as usize;
+
+    for y in 0..height as usize {
+        let row_offset = y * src_stride;
+        let row = &data[row_offset..row_offset + width as usize * bpp];
+        for x in 0..width as usize {
+            let p = &row[x * bpp..x * bpp + bpp];
+            let (r, g, b, a) = sample_rgba8(src_format, p)?;
+            out.extend_from_slice(&[r, g, b, a]);
+        }
+    }
+    Some(out)
+}
+
 fn unpremul_g8(g: u8, a: u8) -> (u8, u8) {
     if a == 0 {
         return (0, 0);
