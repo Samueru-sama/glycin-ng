@@ -614,8 +614,25 @@ pub unsafe extern "C" fn gly_creator_add_frame_with_stride(
         return ptr::null_mut();
     }
     let data = unsafe { slice::from_raw_parts(data_ptr as *const u8, size) };
-    let bpp = 4; // assume RGBA8 for stride calculation; caller provides correct stride
-    let actual_stride = if stride > 0 { stride } else { width * bpp };
+    // When the caller omits an explicit stride, the byte distance
+    // between rows is `width * bytes_per_pixel`. Hardcoding bpp = 4
+    // here would over-read the source for 24-bit RGB textures and
+    // tear the image apart row by row.
+    let actual_stride = if stride > 0 {
+        stride
+    } else {
+        let Some(mf) = memformat::from_gly(memory_format) else {
+            unsafe {
+                set_error(
+                    error,
+                    0,
+                    "gly_creator_add_frame: unsupported memory format",
+                )
+            };
+            return ptr::null_mut();
+        };
+        width * mf.bytes_per_pixel() as u32
+    };
     let frame = FrameData {
         width,
         height,
