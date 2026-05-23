@@ -480,7 +480,6 @@ name = "glycin-ng-libglycin-shim"
 version = "0.2.1"
 dependencies = [
  "bitflags",
- "glycin-ng-c",
  "libc",
 ]
 
