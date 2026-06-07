@@ -1,4 +1,10 @@
 
+## 0.2.3 — 2026-06-07
+
+### Features
+
+- Svg font rendering (#8)
+
 ## 0.2.2 — 2026-05-23
 
 ### Bug Fixes
