@@ -1,4 +1,11 @@
 
+## 0.3.1 — 2026-07-08
+
+### Bug Fixes
+
+- **deps:** Resolve cargo-deny advisories and duplicates
+- Accept image/vnd.ms-dds mime for DDS (#15)
+
 ## 0.3.0 — 2026-06-19
 
 ### Bug Fixes
