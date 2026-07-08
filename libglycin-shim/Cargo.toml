@@ -13,5 +13,5 @@ name = "glycin_2"
 path = "src/lib.rs"
 
 [dependencies]
-bitflags = "2.11.1"
+bitflags = "2.13.0"
 libc = "0.2"
